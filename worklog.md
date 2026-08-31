@@ -29,3 +29,22 @@ Stage Summary:
 - All changes compile successfully
 - Key fix: dynamic imports for file-viewers prevents client-side crash on doc creation
 - Secondary fixes: hydration safety, TypeScript correctness, trash route logic, CSP safety
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Rewrite entire engine/files/docs viewer using modern libraries and patterns
+
+Work Log:
+- Rewrote `doc-editor.tsx`: Replaced deprecated `contentEditable` + `document.execCommand()` with `@mdxeditor/editor` (ProseMirror-based WYSIWYG). Features: proper undo/redo, markdown-native storage, full toolbar (headings, bold/italic/underline, lists, links, images, tables, code blocks, frontmatter, source/diff view), Ctrl+S save, loading state
+- Rewrote `sheet-editor.tsx`: Replaced naive 100-row table with virtualized grid (only renders visible rows via scroll tracking + ResizeObserver). Added: cell range selection (Shift+Click), status bar with SUM/AVG/COUNT for selections, safe recursive descent math parser (no `new Function`), cell formatting (bold, italic, alignment, text/background color), formula bar, keyboard navigation (arrows, Tab, Enter, F2, Delete), circular reference detection (#CIRCULAR), COUNT function
+- Rewrote `slide-editor.tsx`: Added drag-to-move and drag-to-resize elements via pointer events with 8 resize handles. Added framer-motion animations (slide transitions in presentation mode, panel transitions, thumbnail hover, theme picker). Added: undo/redo history stack, 8 modern themes (with gradients), layers panel, opacity/rotation controls, element types (rect, circle, line), duplicate slide/element, arrow key nudging, Ctrl+D duplicate, presentation mode with animated slide transitions
+- Rewrote `file-viewers.tsx`: Image viewer now has scroll-to-zoom, click-drag pan, rotation, fit-to-screen reset. Video viewer has loading spinner. Audio viewer has animated frequency bars. Code viewer has search bar with match count, word wrap toggle. PDF viewer has loading state
+- Updated `zboxy-store.ts`: Added `ViewerType` state for clean viewer routing separation from editor types
+- Updated `drive-layout.tsx`: All 3 editors + 5 viewers now dynamically imported with `ssr: false` (fixes the original "create new doc" crash). Viewer routing uses `viewerType` from store instead of re-computing file categories
+
+Stage Summary:
+- 5 files rewritten from scratch, 2 files updated with targeted edits
+- Build passes cleanly (all 15 routes compile)
+- Key architectural upgrades: ProseMirror doc editor, virtualized spreadsheet, drag/resize slides, modern viewers
+- Fixed the original client-side crash: all editors/viewers are now `ssr: false` dynamic imports

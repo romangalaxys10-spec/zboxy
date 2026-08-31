@@ -25,6 +25,7 @@ export interface ZboxyFile {
 export type ViewMode = 'grid' | 'list';
 export type ActiveView = 'drive' | 'starred' | 'trash' | 'recent';
 export type EditorType = 'doc' | 'sheet' | 'slide' | null;
+export type ViewerType = 'image' | 'video' | 'audio' | 'code' | 'pdf' | null;
 
 interface ZboxyState {
   user: ZboxyUser | null;
@@ -56,6 +57,7 @@ interface ZboxyState {
   openFileId: string | null;
   openFile: ZboxyFile | null;
   editorType: EditorType;
+  viewerType: ViewerType;
   openFileForEdit: (file: ZboxyFile) => void;
   closeFile: () => void;
 
@@ -86,7 +88,7 @@ export const useZboxyStore = create<ZboxyState>((set, get) => ({
   setUser: (u) => set({ user: u }),
   logout: () => {
     localStorage.removeItem('zboxy_token');
-    set({ user: null, token: '', files: [], currentPath: '/', activeView: 'drive', searchQuery: '', selectedFiles: [], openFileId: null, openFile: null, editorType: null });
+    set({ user: null, token: '', files: [], currentPath: '/', activeView: 'drive', searchQuery: '', selectedFiles: [], openFileId: null, openFile: null, editorType: null, viewerType: null });
   },
 
   files: [],
@@ -119,15 +121,17 @@ export const useZboxyStore = create<ZboxyState>((set, get) => ({
   openFileId: null,
   openFile: null,
   editorType: null,
+  viewerType: null,
   openFileForEdit: (file) => {
     const ext = file.name.split('.').pop()?.toLowerCase();
     let editorType: EditorType = null;
+    let viewerType: ViewerType = null;
     if (['zdoc'].includes(ext || '')) editorType = 'doc';
     else if (['zsheet'].includes(ext || '')) editorType = 'sheet';
     else if (['zslide'].includes(ext || '')) editorType = 'slide';
-    set({ openFileId: file.id, openFile: file, editorType });
+    set({ openFileId: file.id, openFile: file, editorType, viewerType });
   },
-  closeFile: () => set({ openFileId: null, openFile: null, editorType: null }),
+  closeFile: () => set({ openFileId: null, openFile: null, editorType: null, viewerType: null }),
 
   detailPanelOpen: false,
   setDetailPanelOpen: (open) => set({ detailPanelOpen: open }),

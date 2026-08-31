@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useZboxyStore, ZboxyFile as ZFile } from '@/lib/zboxy-store';
+import { useZboxyStore, ZboxyFile as ZFile, type ViewerType as ZboxyViewerType } from '@/lib/zboxy-store';
 import { getFileCategory, formatFileSize, type FileCategory } from '@/lib/zboxy-client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,9 +22,10 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import ErrorBoundary from './error-boundary';
-import DocEditor from './doc-editor';
-import SheetEditor from './sheet-editor';
-import SlideEditor from './slide-editor';
+
+const DocEditor = dynamic(() => import('./doc-editor'), { ssr: false });
+const SheetEditor = dynamic(() => import('./sheet-editor'), { ssr: false });
+const SlideEditor = dynamic(() => import('./slide-editor'), { ssr: false });
 
 const ImageViewer = dynamic(() => import('./file-viewers').then(m => ({ default: m.ImageViewer })), { ssr: false });
 const VideoViewer = dynamic(() => import('./file-viewers').then(m => ({ default: m.VideoViewer })), { ssr: false });
@@ -296,19 +297,26 @@ export default function DriveLayout() {
     }
 
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const cat = getFileCategory(file.mimeType || '', file.name);
+
+    // Office editors
     if (['zdoc', 'zsheet', 'zslide'].includes(ext)) {
       openFileForEdit(file);
       return;
     }
 
-    const cat = getFileCategory(file.mimeType || '', file.name);
-    if (cat === 'image') { store.openFileForEdit(file); return; }
-    if (cat === 'video') { store.openFileForEdit(file); return; }
-    if (cat === 'audio') { store.openFileForEdit(file); return; }
-    if (cat === 'code' || ['txt', 'md', 'csv', 'json', 'xml', 'yaml', 'yml'].includes(ext)) {
-      store.openFileForEdit(file); return;
+    // Viewers — set both openFile and viewerType atomically
+    const viewerMap: Record<string, ZboxyViewerType> = {
+      image: 'image', video: 'video', audio: 'audio', code: 'code', pdf: 'pdf',
+    };
+    const isTextFile = ['txt', 'md', 'csv', 'json', 'xml', 'yaml', 'yml'].includes(ext);
+    const vtype = viewerMap[cat] || (isTextFile ? 'code' : null);
+
+    if (vtype) {
+      store.openFileForEdit(file);
+      useZboxyStore.setState({ viewerType: vtype });
+      return;
     }
-    if (cat === 'pdf') { store.openFileForEdit(file); return; }
 
     // Download unknown files
     window.open(`/api/zboxy/files/download?id=${file.id}&token=${token}`, '_blank');
@@ -320,20 +328,17 @@ export default function DriveLayout() {
 
   const breadcrumbs = currentPath === '/' ? [] : currentPath.split('/').filter(Boolean);
 
-  // If an editor is open, render it
+  // If an editor or viewer is open, render it
   if (openFileId && openFile) {
-    const cat = getFileCategory(openFile.mimeType || '', openFile.name);
-    const ext = openFile.name.split('.').pop()?.toLowerCase() || '';
-
     let editor: React.ReactNode = null;
     if (editorType === 'doc') editor = <DocEditor />;
     else if (editorType === 'sheet') editor = <SheetEditor />;
     else if (editorType === 'slide') editor = <SlideEditor />;
-    else if (cat === 'image') editor = <ImageViewer />;
-    else if (cat === 'video') editor = <VideoViewer />;
-    else if (cat === 'audio') editor = <AudioViewer />;
-    else if (cat === 'code' || ['txt', 'md', 'csv', 'json', 'xml', 'yaml', 'yml'].includes(ext)) editor = <CodeViewer />;
-    else if (cat === 'pdf') editor = <PdfViewer />;
+    else if (store.viewerType === 'image') editor = <ImageViewer />;
+    else if (store.viewerType === 'video') editor = <VideoViewer />;
+    else if (store.viewerType === 'audio') editor = <AudioViewer />;
+    else if (store.viewerType === 'code') editor = <CodeViewer />;
+    else if (store.viewerType === 'pdf') editor = <PdfViewer />;
 
     if (editor) return <ErrorBoundary>{editor}</ErrorBoundary>;
   }
