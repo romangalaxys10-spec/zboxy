@@ -8,15 +8,16 @@ datasource db {
 }
 
 model ZboxyUser {
-  id        String      @id @default(cuid())
-  name      String
-  token     String      @unique
-  createdAt DateTime    @default(now())
-  files     ZboxyFile[]
+  id         String          @id @default(cuid())
+  name       String
+  token      String          @unique
+  createdAt  DateTime        @default(now())
+  files      ZboxyFile[]
+  shareLinks ZboxyShareLink[]
 }
 
 model ZboxyFile {
-  id        String   @id @default(cuid())
+  id        String       @id @default(cuid())
   userId    String
   name      String
   type      String   // "file" | "folder"
@@ -27,8 +28,23 @@ model ZboxyFile {
   starred   Boolean  @default(false)
   trashed   Boolean  @default(false)
   content   String?  // text content for docs/sheets/slides
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
+  user       ZboxyUser    @relation(fields: [userId], references: [id])
+  shareLinks ZboxyShareLink[]
+}
+
+model ZboxyShareLink {
+  id        String   @id @default(cuid())
+  fileId    String
+  userId    String
+  token     String   @unique  // public access token (e.g. "abc123def")
+  password  String?  // optional password protection
+  expiresAt DateTime?  // null = never expires
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  file ZboxyFile @relation(fields: [fileId], references: [id])
   user ZboxyUser @relation(fields: [userId], references: [id])
 }

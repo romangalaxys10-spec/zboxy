@@ -19,6 +19,7 @@ import {
   Image as ImageIcon, Video, Music, FileArchive, FileCode, File, ChevronRight, Home,
   RefreshCw, Clock, Eye, Edit3, Folder, ArrowUp,
   Box, Menu, FolderUp, DownloadCloud, UploadCloud, Sparkles, Headphones,
+  Link2, Share2,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import ErrorBoundary from './error-boundary';
@@ -34,6 +35,7 @@ const CodeViewer = dynamic(() => import('./file-viewers').then(m => ({ default: 
 const PdfViewer = dynamic(() => import('./file-viewers').then(m => ({ default: m.PdfViewer })), { ssr: false });
 const MusicBox = dynamic(() => import('./music-box'), { ssr: false });
 const AISlideGenerator = dynamic(() => import('./ai-slide-generator'), { ssr: false });
+const ShareDialog = dynamic(() => import('./share-dialog'), { ssr: false });
 
 // File icon helper
 function FileIcon({ file, size = 20 }: { file: ZFile; size?: number }) {
@@ -120,6 +122,7 @@ export default function DriveLayout() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [dragOver, setDragOver] = useState(false);
+  const [shareDialogFile, setShareDialogFile] = useState<{ id: string; name: string } | null>(null);
 
   const fetchFiles = useCallback(async () => {
     if (!token) return;
@@ -688,6 +691,7 @@ export default function DriveLayout() {
                       <ContextMenuItem onClick={() => { setRenameDialog({ open: true, fileId: file.id, name: file.name }); setRenameValue(file.name); }}><Edit3 className="w-4 h-4 mr-2" /> Rename</ContextMenuItem>
                       <ContextMenuItem onClick={() => handleStar(file.id)}>{file.starred ? <><StarOff className="w-4 h-4 mr-2" /> Unstar</> : <><Star className="w-4 h-4 mr-2" /> Star</>}</ContextMenuItem>
                       <ContextMenuItem onClick={() => handleDownloadFile(file)}><Download className="w-4 h-4 mr-2" /> Download</ContextMenuItem>
+                      <ContextMenuItem onClick={() => setShareDialogFile({ id: file.id, name: file.name })}><Share2 className="w-4 h-4 mr-2" /> Share</ContextMenuItem>
                       <ContextMenuSeparator />
                       <ContextMenuItem className="text-red-600" onClick={() => {
                         if (activeView === 'trash') handleDeletePermanent([file.id]);
@@ -738,6 +742,7 @@ export default function DriveLayout() {
                                 <DropdownMenuItem onClick={() => { setRenameDialog({ open: true, fileId: file.id, name: file.name }); setRenameValue(file.name); }}><Edit3 className="w-4 h-4 mr-2" /> Rename</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleStar(file.id)}>{file.starred ? <><StarOff className="w-4 h-4 mr-2" /> Unstar</> : <><Star className="w-4 h-4 mr-2" /> Star</>}</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleDownloadFile(file)}><Download className="w-4 h-4 mr-2" /> Download</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setShareDialogFile({ id: file.id, name: file.name })}><Share2 className="w-4 h-4 mr-2" /> Share</DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem className="text-red-600" onClick={() => {
                                   if (activeView === 'trash') handleDeletePermanent([file.id]);
@@ -752,6 +757,7 @@ export default function DriveLayout() {
                         <ContextMenuItem onClick={() => handleFileDoubleClick(file)}><Eye className="w-4 h-4 mr-2" /> Open</ContextMenuItem>
                         <ContextMenuItem onClick={() => { setRenameDialog({ open: true, fileId: file.id, name: file.name }); setRenameValue(file.name); }}><Edit3 className="w-4 h-4 mr-2" /> Rename</ContextMenuItem>
                         <ContextMenuItem onClick={() => handleDownloadFile(file)}><Download className="w-4 h-4 mr-2" /> Download</ContextMenuItem>
+                        <ContextMenuItem onClick={() => setShareDialogFile({ id: file.id, name: file.name })}><Share2 className="w-4 h-4 mr-2" /> Share</ContextMenuItem>
                         <ContextMenuItem className="text-red-600" onClick={() => {
                           if (activeView === 'trash') handleDeletePermanent([file.id]);
                           else { setSelectedFiles([file.id]); handleDeleteSelected(); }
@@ -796,6 +802,7 @@ export default function DriveLayout() {
             <div className="space-y-2">
               <Button variant="outline" size="sm" className="w-full gap-2" onClick={() => handleFileDoubleClick(detailFile)}><Eye className="w-3.5 h-3.5" /> Open</Button>
               <Button variant="outline" size="sm" className="w-full gap-2" onClick={() => handleDownloadFile(detailFile)}><Download className="w-3.5 h-3.5" /> Download</Button>
+              <Button variant="outline" size="sm" className="w-full gap-2" onClick={() => setShareDialogFile({ id: detailFile.id, name: detailFile.name })}><Share2 className="w-3.5 h-3.5" /> Share</Button>
               <Button variant="outline" size="sm" className="w-full gap-2" onClick={() => handleStar(detailFile.id)}>{detailFile.starred ? <><StarOff className="w-3.5 h-3.5" /> Unstar</> : <><Star className="w-3.5 h-3.5" /> Star</>}</Button>
             </div>
           </aside>
@@ -846,6 +853,13 @@ export default function DriveLayout() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Share Dialog */}
+      <ShareDialog
+        fileId={shareDialogFile?.id || null}
+        fileName={shareDialogFile?.name || ''}
+        onClose={() => setShareDialogFile(null)}
+      />
     </div>
   );
 }
