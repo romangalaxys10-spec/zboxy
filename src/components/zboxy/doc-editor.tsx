@@ -45,7 +45,7 @@ export default function DocEditor() {
   const [dirty, setDirty] = useState(false);
   const [htmlContent, setHtmlContent] = useState('');
   const editorRef = useRef<HTMLDivElement>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!openFile) return;
@@ -66,7 +66,7 @@ export default function DocEditor() {
             .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.+?)\*/g, '<em>$1</em>')
             .replace(/^- (.+)$/gm, '<li>$1</li>')
-            .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+            .replace(/(<li>[\s\S]*<\/li>)/, '<ul>$1</ul>')
             .replace(/\n\n/g, '</p><p>')
             .replace(/\n/g, '<br/>');
           setHtmlContent(html);
@@ -116,7 +116,7 @@ export default function DocEditor() {
       .trim();
     setContent(text);
     setDirty(true);
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
     saveTimerRef.current = setTimeout(saveContent, 2000);
   };
 
@@ -138,7 +138,7 @@ export default function DocEditor() {
   };
 
   useEffect(() => {
-    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
   }, []);
 
   if (!openFile) return null;

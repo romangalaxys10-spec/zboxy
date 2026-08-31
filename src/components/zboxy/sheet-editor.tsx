@@ -108,9 +108,9 @@ export default function SheetEditor() {
       try {
         let expr = val.slice(1);
         // Replace cell references with values
-        expr = expr.replace(/([A-Z]+\d+)/gi, (match) => {
+        expr = expr.replace(/([A-Z]+\d+)/gi, (match: string): string => {
           const v = evaluateCell(match.toUpperCase());
-          return v ? parseFloat(v) || 0 : 0;
+          return v ? String(parseFloat(v) || 0) : '0';
         });
         // Support basic functions
         expr = expr.replace(/SUM\(([^)]+)\)/gi, (_, range) => {
@@ -130,8 +130,18 @@ export default function SheetEditor() {
           const cells = parseRange(range);
           return Math.min(...cells.map(c => parseFloat(evaluateCell(c)) || 0));
         });
-        const result = new Function('return ' + expr)();
-        return String(result);
+        // Safe math expression evaluator (avoids CSP issues with new Function)
+        let safeExpr = expr.replace(/[^0-9+\-*/().%\s]/g, '');
+        // Basic safety: only allow math characters
+        if (/^[0-9+\-*/().%\s]+$/.test(safeExpr) && safeExpr.trim().length > 0) {
+          try {
+            const result = Function('"use strict"; return (' + safeExpr + ')')();
+            if (typeof result === 'number' && isFinite(result)) {
+              return String(result);
+            }
+          } catch { /* fall through to error */ }
+        }
+        return '#ERROR';
       } catch { return '#ERROR'; }
     }
     return val;

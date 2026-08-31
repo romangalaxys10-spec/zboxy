@@ -20,11 +20,17 @@ import {
   RefreshCw, Clock, Eye, Edit3, Folder, ArrowUp,
   Box, Menu
 } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import ErrorBoundary from './error-boundary';
 import DocEditor from './doc-editor';
 import SheetEditor from './sheet-editor';
 import SlideEditor from './slide-editor';
-import { ImageViewer, VideoViewer, AudioViewer, CodeViewer, PdfViewer } from './file-viewers';
+
+const ImageViewer = dynamic(() => import('./file-viewers').then(m => ({ default: m.ImageViewer })), { ssr: false });
+const VideoViewer = dynamic(() => import('./file-viewers').then(m => ({ default: m.VideoViewer })), { ssr: false });
+const AudioViewer = dynamic(() => import('./file-viewers').then(m => ({ default: m.AudioViewer })), { ssr: false });
+const CodeViewer = dynamic(() => import('./file-viewers').then(m => ({ default: m.CodeViewer })), { ssr: false });
+const PdfViewer = dynamic(() => import('./file-viewers').then(m => ({ default: m.PdfViewer })), { ssr: false });
 
 // File icon helper
 function FileIcon({ file, size = 20 }: { file: ZFile; size?: number }) {
@@ -47,6 +53,7 @@ function FileIcon({ file, size = 20 }: { file: ZFile; size?: number }) {
 
 // Thumbnails for office files
 function FileThumbnail({ file }: { file: ZFile }) {
+  const token = useZboxyStore(s => s.token);
   const ext = file.name.split('.').pop()?.toLowerCase() || '';
   if (file.type === 'folder') {
     return (
@@ -57,7 +64,7 @@ function FileThumbnail({ file }: { file: ZFile }) {
   }
   const cat = getFileCategory(file.mimeType || '', file.name);
   if (cat === 'image') {
-    return <img src={`/api/zboxy/files/download?id=${file.id}&token=${useZboxyStore.getState().token}`} alt={file.name} className="w-full h-full object-cover rounded-t-lg" />;
+    return <img src={`/api/zboxy/files/download?id=${file.id}&token=${token}`} alt={file.name} className="w-full h-full object-cover rounded-t-lg" />;
   }
   const bgColors: Record<string, string> = {
     document: 'bg-blue-50', spreadsheet: 'bg-emerald-50', presentation: 'bg-orange-50',
@@ -138,15 +145,7 @@ export default function DriveLayout() {
 
   useEffect(() => { fetchFiles(); }, [fetchFiles]);
 
-  // Auto-try login on mount
-  useEffect(() => {
-    if (!user && token) {
-      fetch('/api/zboxy/auth/me', { headers: { 'x-zboxy-token': token } })
-        .then(r => r.ok ? r.json() : null)
-        .then(u => { if (u) store.setUser(u); })
-        .catch(() => {});
-    }
-  }, []);
+  // Auto-try login on mount is handled in page.tsx
 
   const handleDeleteSelected = async () => {
     try {
@@ -500,7 +499,7 @@ export default function DriveLayout() {
 
           {/* Drag overlay */}
           {dragOver && (
-            <div className="absolute inset-0 bg-emerald-500/10 border-2 border-dashed border-emerald-500 z-30 flex items-center justify-center pointer-events-none">
+            <div className="fixed inset-0 bg-emerald-500/10 border-2 border-dashed border-emerald-500 z-30 flex items-center justify-center pointer-events-none">
               <div className="bg-white rounded-xl p-8 shadow-xl text-center">
                 <Upload className="w-12 h-12 text-emerald-500 mx-auto mb-2" />
                 <p className="text-lg font-medium text-slate-700">Drop files to upload</p>
