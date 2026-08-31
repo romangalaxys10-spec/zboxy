@@ -23,7 +23,7 @@ export interface ZboxyFile {
 }
 
 export type ViewMode = 'grid' | 'list';
-export type ActiveView = 'drive' | 'starred' | 'trash' | 'recent';
+export type ActiveView = 'drive' | 'starred' | 'trash' | 'recent' | 'music' | 'ai-slides';
 export type EditorType = 'doc' | 'sheet' | 'slide' | null;
 export type ViewerType = 'image' | 'video' | 'audio' | 'code' | 'pdf' | null;
 

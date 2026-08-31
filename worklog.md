@@ -48,3 +48,22 @@ Stage Summary:
 - Build passes cleanly (all 15 routes compile)
 - Key architectural upgrades: ProseMirror doc editor, virtualized spreadsheet, drag/resize slides, modern viewers
 - Fixed the original client-side crash: all editors/viewers are now `ssr: false` dynamic imports
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Add folder upload/backup, music box, and AI slide generator features
+
+Work Log:
+- Created `src/app/api/zboxy/backup/route.ts` — GET exports all user files as JSON backup; POST imports/merges a JSON backup
+- Created `src/app/api/zboxy/ai-slides/route.ts` — POST calls GLM via z-ai-web-dev-sdk to generate slide content, validates/normalizes, saves as .zslide file
+- Created `src/components/zboxy/music-box.tsx` — Full music player: scans user storage for audio files, playlist with search/favorites, play/pause/skip/shuffle/repeat, progress bar with seek, volume control, upload files or folders, delete tracks, animated playing indicators, dark gradient UI
+- Created `src/components/zboxy/ai-slide-generator.tsx` — AI slide template generator: topic input with 8 suggestions, 6 style presets (Business/Creative/Minimal/Academic/Pitch/Education), slide count slider (3-12), generates via GLM then opens in slide editor
+- Updated `src/components/zboxy/drive-layout.tsx` — Added sidebar entries (Music Box, AI Slides), folder upload button (webkitdirectory), backup dropdown (export/import), hidden file inputs, folder upload handler (preserves directory structure), backup export/import handlers, view routing for music and AI slides views
+- Updated `src/lib/zboxy-store.ts` — Extended ActiveView type with 'music' and 'ai-slides'
+
+Stage Summary:
+- 4 new files created, 2 existing files modified
+- 2 new API routes (backup, ai-slides), total 17 routes
+- Build passes cleanly
+- 3 major features: folder upload + backup/restore, music box with player, AI slide generator

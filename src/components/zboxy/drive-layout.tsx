@@ -18,7 +18,7 @@ import {
   MoreVertical, X, Download, StarOff, FolderOpen, FileText, Table2, Presentation,
   Image as ImageIcon, Video, Music, FileArchive, FileCode, File, ChevronRight, Home,
   RefreshCw, Clock, Eye, Edit3, Folder, ArrowUp,
-  Box, Menu
+  Box, Menu, FolderUp, DownloadCloud, UploadCloud, Sparkles, Headphones,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import ErrorBoundary from './error-boundary';
@@ -32,6 +32,8 @@ const VideoViewer = dynamic(() => import('./file-viewers').then(m => ({ default:
 const AudioViewer = dynamic(() => import('./file-viewers').then(m => ({ default: m.AudioViewer })), { ssr: false });
 const CodeViewer = dynamic(() => import('./file-viewers').then(m => ({ default: m.CodeViewer })), { ssr: false });
 const PdfViewer = dynamic(() => import('./file-viewers').then(m => ({ default: m.PdfViewer })), { ssr: false });
+const MusicBox = dynamic(() => import('./music-box'), { ssr: false });
+const AISlideGenerator = dynamic(() => import('./ai-slide-generator'), { ssr: false });
 
 // File icon helper
 function FileIcon({ file, size = 20 }: { file: ZFile; size?: number }) {
@@ -109,6 +111,8 @@ export default function DriveLayout() {
   } = store;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const backupInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [newFileName, setNewFileName] = useState('');
   const [newFileType, setNewFileType] = useState<'doc' | 'sheet' | 'slide'>('doc');
@@ -194,6 +198,100 @@ export default function DriveLayout() {
     setUploadProgress(0);
     fetchFiles();
     toast.success(`${done} file(s) uploaded`);
+  };
+
+  // Folder upload (preserves directory structure)
+  const handleFolderUpload = async (fileList: FileList) => {
+    setUploading(true);
+    let done = 0;
+    const total = Array.from(fileList).length;
+    const createdFolders = new Set<string>();
+
+    // First pass: collect and create all unique folders
+    for (const file of Array.from(fileList)) {
+      const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || '';
+      const parts = relativePath.split('/');
+      if (parts.length > 1) {
+        // Build up folder paths and create them
+        let folderPath = '';
+        for (let i = 0; i < parts.length - 1; i++) {
+          folderPath = folderPath === '' ? '/' + parts[i] : folderPath + '/' + parts[i];
+          if (!createdFolders.has(folderPath)) {
+            createdFolders.add(folderPath);
+            try {
+              await fetch('/api/zboxy/folders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-zboxy-token': token },
+                body: JSON.stringify({ name: parts[i], parent: folderPath.substring(0, folderPath.lastIndexOf('/')) || '/' }),
+              });
+            } catch { /* folder may already exist */ }
+          }
+        }
+      }
+    }
+
+    // Second pass: upload files to correct folders
+    for (const file of Array.from(fileList)) {
+      const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || '';
+      const parts = relativePath.split('/');
+      const fileName = parts[parts.length - 1];
+      const folderPath = parts.length > 1
+        ? '/' + parts.slice(0, parts.length - 1).join('/')
+        : currentPath;
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', folderPath);
+      try {
+        await fetch('/api/zboxy/files', { method: 'POST', headers: { 'x-zboxy-token': token }, body: formData });
+      } catch { toast.error(`${fileName}: Upload failed`); }
+      done++;
+      setUploadProgress(Math.round((done / total) * 100));
+    }
+    setUploading(false);
+    setUploadProgress(0);
+    fetchFiles();
+    toast.success(`Folder uploaded: ${done} file(s), ${createdFolders.size} folder(s)`);
+  };
+
+  // Backup export
+  const handleBackupExport = async () => {
+    try {
+      const res = await fetch('/api/zboxy/backup', { headers: { 'x-zboxy-token': token } });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `zboxy-backup-${Date.now()}.json`;
+        a.click(); URL.revokeObjectURL(url);
+        toast.success('Backup downloaded');
+      }
+    } catch { toast.error('Backup export failed'); }
+  };
+
+  // Backup import
+  const handleBackupImport = async () => {
+    const file = backupInputRef.current?.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('backup', file);
+      const res = await fetch('/api/zboxy/backup', {
+        method: 'POST',
+        headers: { 'x-zboxy-token': token },
+        body: formData,
+      });
+      if (res.ok) {
+        const d = await res.json();
+        toast.success(`Restored: ${d.imported} imported, ${d.skipped} skipped`);
+        fetchFiles();
+      } else {
+        const d = await res.json();
+        toast.error(d.error);
+      }
+    } catch { toast.error('Backup import failed'); }
+    setUploading(false);
   };
 
   const handleCreateFile = async () => {
@@ -328,6 +426,12 @@ export default function DriveLayout() {
 
   const breadcrumbs = currentPath === '/' ? [] : currentPath.split('/').filter(Boolean);
 
+  // Music Box full-page view
+  if (activeView === 'music') return <ErrorBoundary><MusicBox /></ErrorBoundary>;
+
+  // AI Slide Generator full-page view
+  if (activeView === 'ai-slides') return <ErrorBoundary><AISlideGenerator /></ErrorBoundary>;
+
   // If an editor or viewer is open, render it
   if (openFileId && openFile) {
     let editor: React.ReactNode = null;
@@ -343,7 +447,7 @@ export default function DriveLayout() {
     if (editor) return <ErrorBoundary>{editor}</ErrorBoundary>;
   }
 
-  const viewTitle = activeView === 'drive' ? 'My Drive' : activeView === 'starred' ? 'Starred' : activeView === 'trash' ? 'Trash' : 'Recent';
+  const viewTitle = activeView === 'drive' ? 'My Drive' : activeView === 'starred' ? 'Starred' : activeView === 'trash' ? 'Trash' : activeView === 'recent' ? 'Recent' : activeView;
 
   return (
     <div className="h-screen flex flex-col bg-white"
@@ -423,6 +527,12 @@ export default function DriveLayout() {
               <button onClick={() => setActiveView('starred')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeView === 'starred' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-600 hover:bg-slate-100'}`}>
                 <Star className="w-4 h-4" /> Starred
               </button>
+              <button onClick={() => setActiveView('music')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeView === 'music' ? 'bg-pink-100 text-pink-700' : 'text-slate-600 hover:bg-slate-100'}`}>
+                <Headphones className="w-4 h-4" /> Music Box
+              </button>
+              <button onClick={() => setActiveView('ai-slides')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeView === 'ai-slides' ? 'bg-violet-100 text-violet-700' : 'text-slate-600 hover:bg-slate-100'}`}>
+                <Sparkles className="w-4 h-4" /> AI Slides
+              </button>
               <button onClick={() => setActiveView('trash')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeView === 'trash' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-600 hover:bg-slate-100'}`}>
                 <Trash2 className="w-4 h-4" /> Trash
               </button>
@@ -486,7 +596,23 @@ export default function DriveLayout() {
             <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5" disabled={activeView === 'trash'}>
               <Upload className="w-3.5 h-3.5" /> Upload
             </Button>
+            <Button variant="outline" size="sm" onClick={() => folderInputRef.current?.click()} className="gap-1.5" disabled={activeView === 'trash'} title="Upload Folder">
+              <FolderUp className="w-3.5 h-3.5" /> Folder
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5" disabled={activeView === 'trash'}>
+                  <DownloadCloud className="w-3.5 h-3.5" /> Backup
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleBackupExport}><DownloadCloud className="w-4 h-4 mr-2" /> Export Backup (JSON)</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => backupInputRef.current?.click()}><UploadCloud className="w-4 h-4 mr-2" /> Import Backup</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => e.target.files && handleUpload(e.target.files)} />
+            <input ref={folderInputRef} type="file" multiple className="hidden" webkitDirectory onChange={(e) => e.target.files && handleFolderUpload(e.target.files)} />
+            <input ref={backupInputRef} type="file" accept=".json" className="hidden" onChange={handleBackupImport} />
             {activeView === 'trash' && files.length > 0 && (
               <Button variant="outline" size="sm" onClick={handleEmptyTrash} className="gap-1 text-red-600">Empty Trash</Button>
             )}
