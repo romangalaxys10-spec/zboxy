@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ZboxyUser {
+  id        String      @id @default(cuid())
+  name      String
+  token     String      @unique
+  createdAt DateTime    @default(now())
+  files     ZboxyFile[]
+}
+
+model ZboxyFile {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  type      String   // "file" | "folder"
+  mimeType  String?
+  size      Int      @default(0)
+  path      String   // relative path from user root, e.g. "/docs/report.pdf"
+  parentId  String?
+  starred   Boolean  @default(false)
+  trashed   Boolean  @default(false)
+  content   String?  // text content for docs/sheets/slides
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user ZboxyUser @relation(fields: [userId], references: [id])
+}

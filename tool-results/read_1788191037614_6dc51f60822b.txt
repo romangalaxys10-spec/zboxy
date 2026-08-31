@@ -1,0 +1,720 @@
+     1→'use client';
+     2→
+     3→import { useEffect, useState, useRef, useCallback } from 'react';
+     4→import { useZboxyStore, ZboxyFile as ZFile } from '@/lib/zboxy-store';
+     5→import { getFileCategory, formatFileSize, type FileCategory } from '@/lib/zboxy-client';
+     6→import { Button } from '@/components/ui/button';
+     7→import { Input } from '@/components/ui/input';
+     8→import { Checkbox } from '@/components/ui/checkbox';
+     9→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+    10→import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+    11→import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '@/components/ui/context-menu';
+    12→
+    13→import { Separator } from '@/components/ui/separator';
+    14→
+    15→import { toast, Toaster } from 'sonner';
+    16→import {
+    17→  HardDrive, Star, Trash2, Search, Grid3X3, List, Upload, FolderPlus, FilePlus,
+    18→  MoreVertical, X, Download, StarOff, FolderOpen, FileText, Table2, Presentation,
+    19→  Image as ImageIcon, Video, Music, FileArchive, FileCode, File, ChevronRight, Home,
+    20→  RefreshCw, Clock, Eye, Edit3, Folder, ArrowUp,
+    21→  Box, Menu
+    22→} from 'lucide-react';
+    23→import DocEditor from './doc-editor';
+    24→import SheetEditor from './sheet-editor';
+    25→import SlideEditor from './slide-editor';
+    26→import { ImageViewer, VideoViewer, AudioViewer, CodeViewer, PdfViewer } from './file-viewers';
+    27→
+    28→// File icon helper
+    29→function FileIcon({ file, size = 20 }: { file: ZFile; size?: number }) {
+    30→  if (file.type === 'folder') return <Folder className="text-amber-500" style={{ width: size, height: size }} />;
+    31→  const cat = getFileCategory(file.mimeType || '', file.name);
+    32→  const iconMap: Record<FileCategory, React.ReactNode> = {
+    33→    document: <FileText className="text-blue-600" style={{ width: size, height: size }} />,
+    34→    spreadsheet: <Table2 className="text-emerald-600" style={{ width: size, height: size }} />,
+    35→    presentation: <Presentation className="text-orange-600" style={{ width: size, height: size }} />,
+    36→    image: <ImageIcon className="text-purple-500" style={{ width: size, height: size }} />,
+    37→    video: <Video className="text-red-500" style={{ width: size, height: size }} />,
+    38→    audio: <Music className="text-pink-500" style={{ width: size, height: size }} />,
+    39→    pdf: <FileText className="text-red-600" style={{ width: size, height: size }} />,
+    40→    archive: <FileArchive className="text-amber-700" style={{ width: size, height: size }} />,
+    41→    code: <FileCode className="text-slate-600" style={{ width: size, height: size }} />,
+    42→    other: <File className="text-slate-400" style={{ width: size, height: size }} />,
+    43→  };
+    44→  return <>{iconMap[cat] || iconMap.other}</>;
+    45→}
+    46→
+    47→// Thumbnails for office files
+    48→function FileThumbnail({ file }: { file: ZFile }) {
+    49→  const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    50→  if (file.type === 'folder') {
+    51→    return (
+    52→      <div className="w-full h-full bg-amber-50 rounded-t-lg flex items-center justify-center">
+    53→        <Folder className="w-16 h-16 text-amber-400" />
+    54→      </div>
+    55→    );
+    56→  }
+    57→  const cat = getFileCategory(file.mimeType || '', file.name);
+    58→  if (cat === 'image') {
+    59→    return <img src={`/api/zboxy/files/download?id=${file.id}&token=${useZboxyStore.getState().token}`} alt={file.name} className="w-full h-full object-cover rounded-t-lg" />;
+    60→  }
+    61→  const bgColors: Record<string, string> = {
+    62→    document: 'bg-blue-50', spreadsheet: 'bg-emerald-50', presentation: 'bg-orange-50',
+    63→    pdf: 'bg-red-50', code: 'bg-slate-50', video: 'bg-red-50', audio: 'bg-pink-50',
+    64→  };
+    65→  const labels: Record<string, string> = {
+    66→    zdoc: 'DOC', zsheet: 'SHEET', zslide: 'SLIDE',
+    67→    pdf: 'PDF', doc: 'DOC', docx: 'DOCX', xls: 'XLS', xlsx: 'XLSX',
+    68→    ppt: 'PPT', pptx: 'PPTX', csv: 'CSV',
+    69→  };
+    70→  return (
+    71→    <div className={`w-full h-2/3 ${bgColors[cat] || 'bg-slate-50'} rounded-t-lg flex items-center justify-center relative`}>
+    72→      <FileIcon file={file} size={48} />
+    73→      {labels[ext] && (
+    74→        <span className="absolute bottom-2 right-2 text-[10px] font-bold text-slate-500 bg-white/80 px-1.5 py-0.5 rounded">
+    75→          {labels[ext]}
+    76→        </span>
+    77→      )}
+    78→    </div>
+    79→  );
+    80→}
+    81→
+    82→// Format date
+    83→function formatDate(d: string) {
+    84→  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    85→}
+    86→function formatTime(d: string) {
+    87→  return new Date(d).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    88→}
+    89→
+    90→export default function DriveLayout() {
+    91→  const store = useZboxyStore();
+    92→  const {
+    93→    user, token, files, setFiles, currentPath, setCurrentPath,
+    94→    activeView, setActiveView, viewMode, setViewMode,
+    95→    searchQuery, setSearchQuery, selectedFiles, setSelectedFiles,
+    96→    toggleSelect, clearSelection, openFileForEdit, openFileId, editorType,
+    97→    detailPanelOpen, setDetailPanelOpen, detailFile, setDetailFile,
+    98→    newFileDialog, setNewFileDialog, renameDialog, setRenameDialog,
+    99→    loading, setLoading, closeFile, logout,
+   100→  } = store;
+   101→
+   102→  const fileInputRef = useRef<HTMLInputElement>(null);
+   103→  const [uploading, setUploading] = useState(false);
+   104→  const [newFileName, setNewFileName] = useState('');
+   105→  const [newFileType, setNewFileType] = useState<'doc' | 'sheet' | 'slide'>('doc');
+   106→  const [renameValue, setRenameValue] = useState('');
+   107→  const [uploadProgress, setUploadProgress] = useState(0);
+   108→  const [sidebarOpen, setSidebarOpen] = useState(true);
+   109→  const [dragOver, setDragOver] = useState(false);
+   110→
+   111→  const fetchFiles = useCallback(async () => {
+   112→    if (!token) return;
+   113→    setLoading(true);
+   114→    try {
+   115→      const params = new URLSearchParams();
+   116→      if (activeView === 'starred') params.set('starred', 'true');
+   117→      else if (activeView === 'trash') params.set('trashed', 'true');
+   118→      else if (activeView === 'recent') { /* fetch all non-trashed */ }
+   119→      else params.set('folder', currentPath);
+   120→
+   121→      if (searchQuery) params.set('search', searchQuery);
+   122→
+   123→      const res = await fetch(`/api/zboxy/files?${params}`, {
+   124→        headers: { 'x-zboxy-token': token },
+   125→      });
+   126→      if (res.ok) {
+   127→        let data = await res.json();
+   128→        // For recent view, sort by updatedAt
+   129→        if (activeView === 'recent') {
+   130→          data = data.sort((a: ZFile, b: ZFile) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 50);
+   131→        }
+   132→        setFiles(data);
+   133→      }
+   134→    } catch {}
+   135→    setLoading(false);
+   136→  }, [token, activeView, currentPath, searchQuery, setFiles, setLoading]);
+   137→
+   138→  useEffect(() => { fetchFiles(); }, [fetchFiles]);
+   139→
+   140→  // Auto-try login on mount
+   141→  useEffect(() => {
+   142→    if (!user && token) {
+   143→      fetch('/api/zboxy/auth/me', { headers: { 'x-zboxy-token': token } })
+   144→        .then(r => r.ok ? r.json() : null)
+   145→        .then(u => { if (u) store.setUser(u); })
+   146→        .catch(() => {});
+   147→    }
+   148→  }, []);
+   149→
+   150→  const handleDeleteSelected = async () => {
+   151→    try {
+   152→      const res = await fetch(`/api/zboxy/files?ids=${selectedFiles.join(',')}`, {
+   153→        method: 'DELETE',
+   154→        headers: { 'x-zboxy-token': token },
+   155→      });
+   156→      if (res.ok) { toast.success(`${selectedFiles.length} item(s) moved to trash`); clearSelection(); fetchFiles(); }
+   157→    } catch { toast.error('Failed to delete'); }
+   158→  };
+   159→
+   160→  // Keyboard shortcuts
+   161→  useEffect(() => {
+   162→    const handler = (e: KeyboardEvent) => {
+   163→      if (e.key === 'Delete' && selectedFiles.length > 0) handleDeleteSelected();
+   164→      if ((e.metaKey || e.ctrlKey) && e.key === 'a') { e.preventDefault(); setSelectedFiles(files.map(f => f.id)); }
+   165→    };
+   166→    window.addEventListener('keydown', handler);
+   167→    return () => window.removeEventListener('keydown', handler);
+   168→  }, [selectedFiles, files]);
+   169→
+   170→  const handleUpload = async (fileList: FileList | File[]) => {
+   171→    setUploading(true);
+   172→    let done = 0;
+   173→    const total = Array.from(fileList).length;
+   174→    for (const file of Array.from(fileList)) {
+   175→      const formData = new FormData();
+   176→      formData.append('file', file);
+   177→      formData.append('folder', currentPath);
+   178→      try {
+   179→        const res = await fetch('/api/zboxy/files', {
+   180→          method: 'POST',
+   181→          headers: { 'x-zboxy-token': token },
+   182→          body: formData,
+   183→        });
+   184→        if (!res.ok) {
+   185→          const d = await res.json();
+   186→          toast.error(`${file.name}: ${d.error}`);
+   187→        }
+   188→      } catch { toast.error(`${file.name}: Upload failed`); }
+   189→      done++;
+   190→      setUploadProgress(Math.round((done / total) * 100));
+   191→    }
+   192→    setUploading(false);
+   193→    setUploadProgress(0);
+   194→    fetchFiles();
+   195→    toast.success(`${done} file(s) uploaded`);
+   196→  };
+   197→
+   198→  const handleCreateFile = async () => {
+   199→    if (!newFileName.trim()) return;
+   200→    try {
+   201→      const ext = newFileType === 'doc' ? '.zdoc' : newFileType === 'sheet' ? '.zsheet' : '.zslide';
+   202→      const name = newFileName.trim() + ext;
+   203→      const res = await fetch('/api/zboxy/files', {
+   204→        method: 'POST',
+   205→        headers: { 'Content-Type': 'application/json', 'x-zboxy-token': token },
+   206→        body: JSON.stringify({ name, type: 'file', folder: currentPath, content: '' }),
+   207→      });
+   208→      if (res.ok) {
+   209→        const file = await res.json();
+   210→        toast.success(`Created ${name}`);
+   211→        setNewFileDialog(false);
+   212→        setNewFileName('');
+   213→        fetchFiles();
+   214→        openFileForEdit(file);
+   215→      } else {
+   216→        const d = await res.json();
+   217→        toast.error(d.error);
+   218→      }
+   219→    } catch { toast.error('Failed to create file'); }
+   220→  };
+   221→
+   222→  const handleCreateFolder = async () => {
+   223→    const name = 'New folder';
+   224→    try {
+   225→      const res = await fetch('/api/zboxy/folders', {
+   226→        method: 'POST',
+   227→        headers: { 'Content-Type': 'application/json', 'x-zboxy-token': token },
+   228→        body: JSON.stringify({ name, parent: currentPath }),
+   229→      });
+   230→      if (res.ok) { toast.success('Folder created'); fetchFiles(); }
+   231→      else { const d = await res.json(); toast.error(d.error); }
+   232→    } catch { toast.error('Failed to create folder'); }
+   233→  };
+   234→
+   235→  const handleDeletePermanent = async (ids: string[]) => {
+   236→    try {
+   237→      const res = await fetch(`/api/zboxy/files?ids=${ids.join(',')}&permanent=true`, {
+   238→        method: 'DELETE',
+   239→        headers: { 'x-zboxy-token': token },
+   240→      });
+   241→      if (res.ok) { toast.success('Permanently deleted'); fetchFiles(); }
+   242→    } catch { toast.error('Failed'); }
+   243→  };
+   244→
+   245→  const handleRestore = async (ids: string[]) => {
+   246→    try {
+   247→      const res = await fetch('/api/zboxy/trash', {
+   248→        method: 'POST',
+   249→        headers: { 'Content-Type': 'application/json', 'x-zboxy-token': token },
+   250→        body: JSON.stringify({ ids, restore: true }),
+   251→      });
+   252→      if (res.ok) { toast.success('Restored'); fetchFiles(); }
+   253→    } catch { toast.error('Failed'); }
+   254→  };
+   255→
+   256→  const handleEmptyTrash = async () => {
+   257→    try {
+   258→      const res = await fetch('/api/zboxy/trash', {
+   259→        method: 'DELETE',
+   260→        headers: { 'Content-Type': 'application/json', 'x-zboxy-token': token },
+   261→        body: JSON.stringify({ ids: [] }),
+   262→      });
+   263→      if (res.ok) { toast.success('Trash emptied'); fetchFiles(); }
+   264→    } catch { toast.error('Failed'); }
+   265→  };
+   266→
+   267→  const handleStar = async (fileId: string) => {
+   268→    try {
+   269→      const res = await fetch('/api/zboxy/star', {
+   270→        method: 'POST',
+   271→        headers: { 'Content-Type': 'application/json', 'x-zboxy-token': token },
+   272→        body: JSON.stringify({ id: fileId }),
+   273→      });
+   274→      if (res.ok) fetchFiles();
+   275→    } catch {}
+   276→  };
+   277→
+   278→  const handleRename = async () => {
+   279→    if (!renameDialog || !renameValue.trim()) return;
+   280→    try {
+   281→      const res = await fetch('/api/zboxy/rename', {
+   282→        method: 'POST',
+   283→        headers: { 'Content-Type': 'application/json', 'x-zboxy-token': token },
+   284→        body: JSON.stringify({ id: renameDialog.fileId, name: renameValue.trim() }),
+   285→      });
+   286→      if (res.ok) { toast.success('Renamed'); setRenameDialog(null); fetchFiles(); }
+   287→      else { const d = await res.json(); toast.error(d.error); }
+   288→    } catch { toast.error('Failed'); }
+   289→  };
+   290→
+   291→  const handleFileDoubleClick = (file: ZFile) => {
+   292→    if (file.type === 'folder') {
+   293→      const newPath = currentPath === '/' ? '/' + file.name : currentPath + '/' + file.name;
+   294→      setCurrentPath(newPath);
+   295→      return;
+   296→    }
+   297→
+   298→    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+   299→    if (['zdoc', 'zsheet', 'zslide'].includes(ext)) {
+   300→      openFileForEdit(file);
+   301→      return;
+   302→    }
+   303→
+   304→    const cat = getFileCategory(file.mimeType || '', file.name);
+   305→    if (cat === 'image') { store.openFileForEdit(file); return; }
+   306→    if (cat === 'video') { store.openFileForEdit(file); return; }
+   307→    if (cat === 'audio') { store.openFileForEdit(file); return; }
+   308→    if (cat === 'code' || ['txt', 'md', 'csv', 'json', 'xml', 'yaml', 'yml'].includes(ext)) {
+   309→      store.openFileForEdit(file); return;
+   310→    }
+   311→    if (cat === 'pdf') { store.openFileForEdit(file); return; }
+   312→
+   313→    // Download unknown files
+   314→    window.open(`/api/zboxy/files/download?id=${file.id}&token=${token}`, '_blank');
+   315→  };
+   316→
+   317→  const handleDownloadFile = (file: ZFile) => {
+   318→    window.open(`/api/zboxy/files/download?id=${file.id}&token=${token}`, '_blank');
+   319→  };
+   320→
+   321→  const breadcrumbs = currentPath === '/' ? [] : currentPath.split('/').filter(Boolean);
+   322→
+   323→  // If an editor is open, render it
+   324→  if (openFileId && openFile) {
+   325→    const cat = getFileCategory(openFile.mimeType || '', openFile.name);
+   326→    const ext = openFile.name.split('.').pop()?.toLowerCase() || '';
+   327→
+   328→    if (editorType === 'doc') return <DocEditor />;
+   329→    if (editorType === 'sheet') return <SheetEditor />;
+   330→    if (editorType === 'slide') return <SlideEditor />;
+   331→    if (cat === 'image') return <ImageViewer />;
+   332→    if (cat === 'video') return <VideoViewer />;
+   333→    if (cat === 'audio') return <AudioViewer />;
+   334→    if (cat === 'code' || ['txt', 'md', 'csv', 'json', 'xml', 'yaml', 'yml'].includes(ext)) return <CodeViewer />;
+   335→    if (cat === 'pdf') return <PdfViewer />;
+   336→  }
+   337→
+   338→  const viewTitle = activeView === 'drive' ? 'My Drive' : activeView === 'starred' ? 'Starred' : activeView === 'trash' ? 'Trash' : 'Recent';
+   339→
+   340→  return (
+   341→    <div className="h-screen flex flex-col bg-white"
+   342→      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+   343→      onDragLeave={() => setDragOver(false)}
+   344→      onDrop={(e) => {
+   345→        e.preventDefault(); setDragOver(false);
+   346→        if (e.dataTransfer.files.length && activeView === 'drive') handleUpload(e.dataTransfer.files);
+   347→      }}
+   348→    >
+   349→      <Toaster richColors position="top-right" />
+   350→
+   351→      {/* Top Bar */}
+   352→      <header className="flex items-center gap-3 px-4 py-2 border-b bg-white shrink-0 z-20">
+   353→        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-1.5 hover:bg-slate-100 rounded-lg">
+   354→          <Menu className="w-5 h-5 text-slate-600" />
+   355→        </button>
+   356→        <div className="flex items-center gap-2">
+   357→          <div className="w-7 h-7 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+   358→            <Box className="w-4 h-4 text-white" />
+   359→          </div>
+   360→          <span className="font-bold text-lg bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent hidden sm:inline">Zboxy</span>
+   361→        </div>
+   362→        {/* Search */}
+   363→        <div className="flex-1 max-w-xl mx-auto">
+   364→          <div className="relative">
+   365→            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+   366→            <Input
+   367→              className="pl-9 h-9 bg-slate-100 border-transparent focus:border-emerald-300 focus:bg-white transition-colors"
+   368→              placeholder="Search in {viewTitle}..."
+   369→              value={searchQuery}
+   370→              onChange={(e) => setSearchQuery(e.target.value)}
+   371→            />
+   372→            {searchQuery && (
+   373→              <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2">
+   374→                <X className="w-4 h-4 text-slate-400" />
+   375→              </button>
+   376→            )}
+   377→          </div>
+   378→        </div>
+   379→        {/* Right actions */}
+   380→        <div className="flex items-center gap-1">
+   381→          <Button variant="ghost" size="icon" onClick={fetchFiles} title="Refresh"><RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /></Button>
+   382→          <Button variant="ghost" size="icon" onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')} title="Toggle view">
+   383→            {viewMode === 'grid' ? <List className="w-4 h-4" /> : <Grid3X3 className="w-4 h-4" />}
+   384→          </Button>
+   385→          <DropdownMenu>
+   386→            <DropdownMenuTrigger asChild>
+   387→              <Button variant="ghost" size="icon" title="More actions"><MoreVertical className="w-4 h-4" /></Button>
+   388→            </DropdownMenuTrigger>
+   389→            <DropdownMenuContent align="end">
+   390→              <DropdownMenuItem onClick={logout}>Sign out</DropdownMenuItem>
+   391→            </DropdownMenuContent>
+   392→          </DropdownMenu>
+   393→          <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center text-sm font-semibold text-emerald-700 ml-1">
+   394→            {user?.name?.[0]?.toUpperCase() || '?'}
+   395→          </div>
+   396→        </div>
+   397→      </header>
+   398→
+   399→      <div className="flex-1 flex overflow-hidden">
+   400→        {/* Sidebar */}
+   401→        {sidebarOpen && (
+   402→          <aside className="w-60 border-r bg-slate-50/50 flex flex-col shrink-0">
+   403→            <div className="p-3">
+   404→              <Button onClick={() => setNewFileDialog(true)} className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700">
+   405→                <FilePlus className="w-4 h-4" /> New
+   406→              </Button>
+   407→            </div>
+   408→            <nav className="flex-1 px-2 space-y-0.5">
+   409→              <button onClick={() => setActiveView('drive')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeView === 'drive' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-600 hover:bg-slate-100'}`}>
+   410→                <HardDrive className="w-4 h-4" /> My Drive
+   411→              </button>
+   412→              <button onClick={() => setActiveView('recent')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeView === 'recent' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-600 hover:bg-slate-100'}`}>
+   413→                <Clock className="w-4 h-4" /> Recent
+   414→              </button>
+   415→              <button onClick={() => setActiveView('starred')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeView === 'starred' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-600 hover:bg-slate-100'}`}>
+   416→                <Star className="w-4 h-4" /> Starred
+   417→              </button>
+   418→              <button onClick={() => setActiveView('trash')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeView === 'trash' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-600 hover:bg-slate-100'}`}>
+   419→                <Trash2 className="w-4 h-4" /> Trash
+   420→              </button>
+   421→              <Separator className="my-2" />
+   422→              <button onClick={handleCreateFolder} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100 transition-colors">
+   423→                <FolderPlus className="w-4 h-4" /> New Folder
+   424→              </button>
+   425→            </nav>
+   426→            <div className="p-3 border-t">
+   427→              <div className="bg-emerald-50 rounded-lg p-3">
+   428→                <p className="text-xs text-emerald-800 font-medium">Free & Unlimited</p>
+   429→                <p className="text-xs text-emerald-600 mt-0.5">All your files are stored securely.</p>
+   430→              </div>
+   431→            </div>
+   432→          </aside>
+   433→        )}
+   434→
+   435→        {/* Main Content */}
+   436→        <main className="flex-1 flex flex-col overflow-hidden">
+   437→          {/* Breadcrumbs */}
+   438→          {activeView === 'drive' && (
+   439→            <div className="flex items-center gap-1 px-4 py-2 border-b bg-slate-50/50 shrink-0 text-sm">
+   440→              <button onClick={() => setCurrentPath('/')} className="flex items-center gap-1 text-slate-500 hover:text-emerald-600">
+   441→                <Home className="w-4 h-4" /> My Drive
+   442→              </button>
+   443→              {breadcrumbs.map((part, i) => (
+   444→                <span key={i} className="flex items-center gap-1">
+   445→                  <ChevronRight className="w-3 h-3 text-slate-400" />
+   446→                  <button onClick={() => {
+   447→                    const newPath = '/' + breadcrumbs.slice(0, i + 1).join('/');
+   448→                    setCurrentPath(newPath);
+   449→                  }} className="text-slate-600 hover:text-emerald-600">
+   450→                    {part}
+   451→                  </button>
+   452→                </span>
+   453→              ))}
+   454→            </div>
+   455→          )}
+   456→
+   457→          {/* Action bar */}
+   458→          <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
+   459→            <span className="text-sm font-medium text-slate-700">{viewTitle}</span>
+   460→            {activeView === 'drive' && currentPath !== '/' && (
+   461→              <Button variant="ghost" size="sm" onClick={() => { const parts = currentPath.split('/').filter(Boolean); parts.pop(); setCurrentPath(parts.length ? '/' + parts.join('/') : '/'); }} className="gap-1 ml-2">
+   462→                <ArrowUp className="w-3 h-3" /> Back
+   463→              </Button>
+   464→            )}
+   465→            <div className="flex-1" />
+   466→            {selectedFiles.length > 0 && (
+   467→              <>
+   468→                <span className="text-xs text-slate-500">{selectedFiles.length} selected</span>
+   469→                <Button variant="outline" size="sm" onClick={() => {
+   470→                  selectedFiles.forEach(id => handleStar(id));
+   471→                }} className="gap-1"><Star className="w-3 h-3" /> Star</Button>
+   472→                {activeView !== 'trash' && (
+   473→                  <Button variant="outline" size="sm" onClick={handleDeleteSelected} className="gap-1 text-red-600"><Trash2 className="w-3 h-3" /> Delete</Button>
+   474→                )}
+   475→                <Button variant="ghost" size="sm" onClick={clearSelection}><X className="w-3 h-3" /></Button>
+   476→              </>
+   477→            )}
+   478→            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5" disabled={activeView === 'trash'}>
+   479→              <Upload className="w-3.5 h-3.5" /> Upload
+   480→            </Button>
+   481→            <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(e) => e.target.files && handleUpload(e.target.files)} />
+   482→            {activeView === 'trash' && files.length > 0 && (
+   483→              <Button variant="outline" size="sm" onClick={handleEmptyTrash} className="gap-1 text-red-600">Empty Trash</Button>
+   484→            )}
+   485→          </div>
+   486→
+   487→          {/* Upload progress */}
+   488→          {uploading && (
+   489→            <div className="px-4 py-2 bg-emerald-50 border-b flex items-center gap-3">
+   490→              <div className="flex-1 h-1.5 bg-emerald-200 rounded-full overflow-hidden">
+   491→                <div className="h-full bg-emerald-500 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+   492→              </div>
+   493→              <span className="text-xs text-emerald-700">{uploadProgress}%</span>
+   494→            </div>
+   495→          )}
+   496→
+   497→          {/* Drag overlay */}
+   498→          {dragOver && (
+   499→            <div className="absolute inset-0 bg-emerald-500/10 border-2 border-dashed border-emerald-500 z-30 flex items-center justify-center pointer-events-none">
+   500→              <div className="bg-white rounded-xl p-8 shadow-xl text-center">
+   501→                <Upload className="w-12 h-12 text-emerald-500 mx-auto mb-2" />
+   502→                <p className="text-lg font-medium text-slate-700">Drop files to upload</p>
+   503→              </div>
+   504→            </div>
+   505→          )}
+   506→
+   507→          {/* File content */}
+   508→          <div className="flex-1 overflow-auto" onClick={() => clearSelection()}>
+   509→            {loading && files.length === 0 ? (
+   510→              <div className="flex items-center justify-center h-64">
+   511→                <div className="animate-spin w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full" />
+   512→              </div>
+   513→            ) : files.length === 0 ? (
+   514→              <div className="flex flex-col items-center justify-center h-64 text-center px-4">
+   515→                {searchQuery ? (
+   516→                  <><Search className="w-12 h-12 text-slate-300 mb-3" /><p className="text-slate-500">No results for &quot;{searchQuery}&quot;</p></>
+   517→                ) : activeView === 'trash' ? (
+   518→                  <><Trash2 className="w-12 h-12 text-slate-300 mb-3" /><p className="text-slate-500">Trash is empty</p></>
+   519→                ) : activeView === 'starred' ? (
+   520→                  <><Star className="w-12 h-12 text-slate-300 mb-3" /><p className="text-slate-500">No starred files</p></>
+   521→                ) : (
+   522→                  <><FolderOpen className="w-12 h-12 text-slate-300 mb-3" /><p className="text-slate-500">This folder is empty</p>
+   523→                  <p className="text-sm text-slate-400 mt-1">Upload files or create new documents</p></>
+   524→                )}
+   525→              </div>
+   526→            ) : viewMode === 'grid' ? (
+   527→              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-1 p-4">
+   528→                {files.map(file => (
+   529→                  <ContextMenu key={file.id}>
+   530→                    <ContextMenuTrigger>
+   531→                      <div
+   532→                        className={`group relative border rounded-lg hover:shadow-md transition-all cursor-pointer ${selectedFiles.includes(file.id) ? 'border-emerald-500 bg-emerald-50/50' : 'border-transparent hover:border-slate-200'}`}
+   533→                        onClick={(e) => { e.stopPropagation(); toggleSelect(file.id); setDetailFile(file); }}
+   534→                        onDoubleClick={() => handleFileDoubleClick(file)}
+   535→                      >
+   536→                        <FileThumbnail file={file} />
+   537→                        <div className="p-2 flex items-start gap-2">
+   538→                          <Checkbox
+   539→                            checked={selectedFiles.includes(file.id)}
+   540→                            onCheckedChange={() => toggleSelect(file.id)}
+   541→                            className="mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+   542→                            onClick={(e) => e.stopPropagation()}
+   543→                          />
+   544→                          <div className="flex-1 min-w-0">
+   545→                            <p className="text-sm font-medium truncate">{file.name}</p>
+   546→                            <p className="text-xs text-slate-500 mt-0.5">{file.type === 'folder' ? 'Folder' : formatFileSize(file.size)}</p>
+   547→                          </div>
+   548→                          {file.starred && <Star className="w-3 h-3 text-amber-400 fill-amber-400 shrink-0" />}
+   549→                        </div>
+   550→                      </div>
+   551→                    </ContextMenuTrigger>
+   552→                    <ContextMenuContent>
+   553→                      <ContextMenuItem onClick={() => handleFileDoubleClick(file)}><Eye className="w-4 h-4 mr-2" /> Open</ContextMenuItem>
+   554→                      <ContextMenuItem onClick={() => { setRenameDialog({ open: true, fileId: file.id, name: file.name }); setRenameValue(file.name); }}><Edit3 className="w-4 h-4 mr-2" /> Rename</ContextMenuItem>
+   555→                      <ContextMenuItem onClick={() => handleStar(file.id)}>{file.starred ? <><StarOff className="w-4 h-4 mr-2" /> Unstar</> : <><Star className="w-4 h-4 mr-2" /> Star</>}</ContextMenuItem>
+   556→                      <ContextMenuItem onClick={() => handleDownloadFile(file)}><Download className="w-4 h-4 mr-2" /> Download</ContextMenuItem>
+   557→                      <ContextMenuSeparator />
+   558→                      <ContextMenuItem className="text-red-600" onClick={() => {
+   559→                        if (activeView === 'trash') handleDeletePermanent([file.id]);
+   560→                        else { setSelectedFiles([file.id]); handleDeleteSelected(); }
+   561→                      }}><Trash2 className="w-4 h-4 mr-2" /> {activeView === 'trash' ? 'Delete permanently' : 'Move to trash'}</ContextMenuItem>
+   562→                    </ContextMenuContent>
+   563→                  </ContextMenu>
+   564→                ))}
+   565→              </div>
+   566→            ) : (
+   567→              <table className="w-full text-sm">
+   568→                <thead className="sticky top-0 bg-white border-b">
+   569→                  <tr>
+   570→                    <th className="w-10 px-4 py-2"><Checkbox checked={files.length > 0 && selectedFiles.length === files.length} onCheckedChange={(checked) => setSelectedFiles(checked ? files.map(f => f.id) : [])} /></th>
+   571→                    <th className="text-left py-2 px-3 font-medium text-slate-500">Name</th>
+   572→                    <th className="text-left py-2 px-3 font-medium text-slate-500 hidden md:table-cell">Owner</th>
+   573→                    <th className="text-left py-2 px-3 font-medium text-slate-500 hidden sm:table-cell">Modified</th>
+   574→                    <th className="text-left py-2 px-3 font-medium text-slate-500 hidden lg:table-cell">Size</th>
+   575→                    <th className="w-10 px-2" />
+   576→                  </tr>
+   577→                </thead>
+   578→                <tbody>
+   579→                  {files.map(file => (
+   580→                    <ContextMenu key={file.id}>
+   581→                      <ContextMenuTrigger>
+   582→                        <tr
+   583→                          className={`border-b hover:bg-slate-50 cursor-pointer transition-colors ${selectedFiles.includes(file.id) ? 'bg-emerald-50' : ''}`}
+   584→                          onClick={(e) => { e.stopPropagation(); toggleSelect(file.id); setDetailFile(file); }}
+   585→                          onDoubleClick={() => handleFileDoubleClick(file)}
+   586→                        >
+   587→                          <td className="px-4 py-1"><Checkbox checked={selectedFiles.includes(file.id)} onCheckedChange={() => toggleSelect(file.id)} onClick={(e) => e.stopPropagation()} /></td>
+   588→                          <td className="py-1 px-3">
+   589→                            <div className="flex items-center gap-3">
+   590→                              <FileIcon file={file} />
+   591→                              <span className="truncate font-medium">{file.name}</span>
+   592→                            </div>
+   593→                          </td>
+   594→                          <td className="py-1 px-3 text-slate-500 hidden md:table-cell">{user?.name || 'me'}</td>
+   595→                          <td className="py-1 px-3 text-slate-500 hidden sm:table-cell">{formatTime(file.updatedAt)}</td>
+   596→                          <td className="py-1 px-3 text-slate-500 hidden lg:table-cell">{file.type === 'folder' ? '--' : formatFileSize(file.size)}</td>
+   597→                          <td className="px-2">
+   598→                            <DropdownMenu>
+   599→                              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+   600→                                <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="w-4 h-4" /></Button>
+   601→                              </DropdownMenuTrigger>
+   602→                              <DropdownMenuContent align="end">
+   603→                                <DropdownMenuItem onClick={() => handleFileDoubleClick(file)}><Eye className="w-4 h-4 mr-2" /> Open</DropdownMenuItem>
+   604→                                <DropdownMenuItem onClick={() => { setRenameDialog({ open: true, fileId: file.id, name: file.name }); setRenameValue(file.name); }}><Edit3 className="w-4 h-4 mr-2" /> Rename</DropdownMenuItem>
+   605→                                <DropdownMenuItem onClick={() => handleStar(file.id)}>{file.starred ? <><StarOff className="w-4 h-4 mr-2" /> Unstar</> : <><Star className="w-4 h-4 mr-2" /> Star</>}</DropdownMenuItem>
+   606→                                <DropdownMenuItem onClick={() => handleDownloadFile(file)}><Download className="w-4 h-4 mr-2" /> Download</DropdownMenuItem>
+   607→                                <DropdownMenuSeparator />
+   608→                                <DropdownMenuItem className="text-red-600" onClick={() => {
+   609→                                  if (activeView === 'trash') handleDeletePermanent([file.id]);
+   610→                                  else { setSelectedFiles([file.id]); handleDeleteSelected(); }
+   611→                                }}><Trash2 className="w-4 h-4 mr-2" /> {activeView === 'trash' ? 'Delete forever' : 'Move to trash'}</DropdownMenuItem>
+   612→                              </DropdownMenuContent>
+   613→                            </DropdownMenu>
+   614→                          </td>
+   615→                        </tr>
+   616→                      </ContextMenuTrigger>
+   617→                      <ContextMenuContent>
+   618→                        <ContextMenuItem onClick={() => handleFileDoubleClick(file)}><Eye className="w-4 h-4 mr-2" /> Open</ContextMenuItem>
+   619→                        <ContextMenuItem onClick={() => { setRenameDialog({ open: true, fileId: file.id, name: file.name }); setRenameValue(file.name); }}><Edit3 className="w-4 h-4 mr-2" /> Rename</ContextMenuItem>
+   620→                        <ContextMenuItem onClick={() => handleDownloadFile(file)}><Download className="w-4 h-4 mr-2" /> Download</ContextMenuItem>
+   621→                        <ContextMenuItem className="text-red-600" onClick={() => {
+   622→                          if (activeView === 'trash') handleDeletePermanent([file.id]);
+   623→                          else { setSelectedFiles([file.id]); handleDeleteSelected(); }
+   624→                        }}><Trash2 className="w-4 h-4 mr-2" /> {activeView === 'trash' ? 'Delete forever' : 'Move to trash'}</ContextMenuItem>
+   625→                      </ContextMenuContent>
+   626→                    </ContextMenu>
+   627→                  ))}
+   628→                </tbody>
+   629→              </table>
+   630→            )}
+   631→          </div>
+   632→
+   633→          {/* Status bar */}
+   634→          <div className="flex items-center justify-between px-4 py-1.5 border-t bg-slate-50 text-xs text-slate-500 shrink-0">
+   635→            <span>{files.length} item{files.length !== 1 ? 's' : ''}</span>
+   636→            <span>Free & unlimited storage</span>
+   637→          </div>
+   638→        </main>
+   639→
+   640→        {/* Detail Panel */}
+   641→        {detailPanelOpen && detailFile && (
+   642→          <aside className="w-72 border-l bg-white p-4 space-y-4 shrink-0 overflow-y-auto">
+   643→            <div className="flex items-center justify-between">
+   644→              <h3 className="font-semibold text-sm">Details</h3>
+   645→              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDetailPanelOpen(false)}><X className="w-3.5 h-3.5" /></Button>
+   646→            </div>
+   647→            <div className="flex flex-col items-center py-4">
+   648→              <FileIcon file={detailFile} size={64} />
+   649→              <p className="font-medium mt-3 text-center break-all">{detailFile.name}</p>
+   650→              <p className="text-xs text-slate-500 mt-1">{detailFile.type === 'folder' ? 'Folder' : getFileCategory(detailFile.mimeType || '', detailFile.name)}</p>
+   651→            </div>
+   652→            <Separator />
+   653→            <div className="space-y-3 text-sm">
+   654→              <div><span className="text-slate-500">Size</span><p className="font-medium">{detailFile.type === 'folder' ? '--' : formatFileSize(detailFile.size)}</p></div>
+   655→              <div><span className="text-slate-500">Location</span><p className="font-medium break-all">{detailFile.path || '/'}</p></div>
+   656→              <div><span className="text-slate-500">Created</span><p className="font-medium">{formatDate(detailFile.createdAt)}</p></div>
+   657→              <div><span className="text-slate-500">Modified</span><p className="font-medium">{formatTime(detailFile.updatedAt)}</p></div>
+   658→              <div><span className="text-slate-500">Starred</span><p className="font-medium">{detailFile.starred ? 'Yes' : 'No'}</p></div>
+   659→              {detailFile.mimeType && <div><span className="text-slate-500">Type</span><p className="font-medium text-xs break-all">{detailFile.mimeType}</p></div>}
+   660→            </div>
+   661→            <Separator />
+   662→            <div className="space-y-2">
+   663→              <Button variant="outline" size="sm" className="w-full gap-2" onClick={() => handleFileDoubleClick(detailFile)}><Eye className="w-3.5 h-3.5" /> Open</Button>
+   664→              <Button variant="outline" size="sm" className="w-full gap-2" onClick={() => handleDownloadFile(detailFile)}><Download className="w-3.5 h-3.5" /> Download</Button>
+   665→              <Button variant="outline" size="sm" className="w-full gap-2" onClick={() => handleStar(detailFile.id)}>{detailFile.starred ? <><StarOff className="w-3.5 h-3.5" /> Unstar</> : <><Star className="w-3.5 h-3.5" /> Star</>}</Button>
+   666→            </div>
+   667→          </aside>
+   668→        )}
+   669→      </div>
+   670→
+   671→      {/* New File Dialog */}
+   672→      <Dialog open={newFileDialog} onOpenChange={setNewFileDialog}>
+   673→        <DialogContent className="sm:max-w-md">
+   674→          <DialogHeader>
+   675→            <DialogTitle>Create New</DialogTitle>
+   676→          </DialogHeader>
+   677→          <div className="space-y-4 py-2">
+   678→            <div className="space-y-2">
+   679→              <label className="text-sm font-medium">File Name</label>
+   680→              <Input placeholder="Untitled" value={newFileName} onChange={(e) => setNewFileName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreateFile()} />
+   681→            </div>
+   682→            <div className="space-y-2">
+   683→              <label className="text-sm font-medium">Type</label>
+   684→              <div className="grid grid-cols-3 gap-3">
+   685→                {[{ type: 'doc' as const, icon: FileText, label: 'Document', desc: 'Rich text editor', color: 'text-blue-600 bg-blue-50' },
+   686→                  { type: 'sheet' as const, icon: Table2, label: 'Spreadsheet', desc: 'Cells & formulas', color: 'text-emerald-600 bg-emerald-50' },
+   687→                  { type: 'slide' as const, icon: Presentation, label: 'Presentation', desc: 'Slides & themes', color: 'text-orange-600 bg-orange-50' },
+   688→                ].map(opt => (
+   689→                  <button key={opt.type} onClick={() => setNewFileType(opt.type)} className={`p-3 rounded-lg border-2 text-center transition-all ${newFileType === opt.type ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}>
+   690→                    <opt.icon className={`w-8 h-8 mx-auto mb-1 ${opt.color.split(' ')[0]}`} />
+   691→                    <p className="text-xs font-medium">{opt.label}</p>
+   692→                  </button>
+   693→                ))}
+   694→              </div>
+   695→            </div>
+   696→          </div>
+   697→          <DialogFooter>
+   698→            <Button variant="outline" onClick={() => setNewFileDialog(false)}>Cancel</Button>
+   699→            <Button onClick={handleCreateFile} disabled={!newFileName.trim()} className="bg-emerald-600 hover:bg-emerald-700">Create</Button>
+   700→          </DialogFooter>
+   701→        </DialogContent>
+   702→      </Dialog>
+   703→
+   704→      {/* Rename Dialog */}
+   705→      <Dialog open={!!renameDialog?.open} onOpenChange={() => setRenameDialog(null)}>
+   706→        <DialogContent className="sm:max-w-md">
+   707→          <DialogHeader><DialogTitle>Rename</DialogTitle></DialogHeader>
+   708→          <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleRename()} />
+   709→          <DialogFooter>
+   710→            <Button variant="outline" onClick={() => setRenameDialog(null)}>Cancel</Button>
+   711→            <Button onClick={handleRename} className="bg-emerald-600 hover:bg-emerald-700">Rename</Button>
+   712→          </DialogFooter>
+   713→        </DialogContent>
+   714→      </Dialog>
+   715→    </div>
+   716→  );
+   717→}
+   718→
+   719→
+   720→
