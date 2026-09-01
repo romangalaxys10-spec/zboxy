@@ -8,6 +8,7 @@ import {
   Box, Download, Lock, Eye, Folder, FileText, Table2, Presentation,
   Image as ImageIcon, Video, Music, File, FileCode, FileArchive,
   ChevronRight, Clock, User, AlertCircle, Loader2, Copy, Check, X,
+  Brain, Github,
 } from 'lucide-react';
 
 type ShareData = {
@@ -308,10 +309,18 @@ export default function SharePage() {
         )}
 
         {/* Footer */}
-        <div className="text-center py-6">
-          <p className="text-xs text-slate-400">
-            Shared via <span className="font-semibold text-slate-500">Zboxy</span> &mdash; Free Unlimited Cloud Drive
+        <div className="text-center py-8 space-y-3">
+          <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
+            <Brain className="w-3.5 h-3.5 text-emerald-500" />
+            <span>Built with <span className="font-semibold text-slate-500">Z.AI GLM 5 Turbo</span></span>
+          </div>
+          <p className="text-xs text-slate-300">
+            Shared via <span className="font-semibold text-slate-500">Zboxy</span>
           </p>
+          <div className="flex items-center justify-center gap-4 text-[11px] text-slate-400">
+            <a href="https://github.com/rommarkdev/zboxy" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">GitHub</a>
+            <span>Developed by <a href="https://www.rommark.dev" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Roman</a></span>
+          </div>
         </div>
       </div>
     </div>
