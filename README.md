@@ -14,7 +14,7 @@
 
 [**Live Demo**](https://zboxy.space-z.ai/) &nbsp;·
 [**Try GLM Coding Plan — 10% OFF**](https://z.ai/subscribe?ic=R0K78RJKNW) &nbsp;·
-[**Report Bug**](https://github.com/rommarkdev/zboxy/issues)
+[**Report Bug**](https://github.com/romangalaxys10-spec/zboxy/issues)
 
 <img src="https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js" />
 <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react" />
@@ -193,7 +193,7 @@ zboxy/
 
 ```bash
 # Clone the repo
-https://github.com/rommarkdev/zboxy.git
+https://github.com/romangalaxys10-spec/zboxy.git
 cd zboxy
 
 # Install dependencies
@@ -308,7 +308,7 @@ MIT — Free to use, modify, and distribute.
 <div align="center">
 
 **[Live Demo](https://zboxy.space-z.ai/)** &nbsp;·
-**[GitHub](https://github.com/rommarkdev/zboxy)** &nbsp;·
+**[GitHub](https://github.com/romangalaxys10-spec/zboxy)** &nbsp;·
 **[GLM Coding Plan — 10% OFF](https://z.ai/subscribe?ic=R0K78RJKNW)**
 
 </div>

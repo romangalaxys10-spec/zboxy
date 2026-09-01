@@ -125,7 +125,7 @@ export default function LoginPage() {
             <span className="text-lg font-semibold tracking-tight">Zboxy</span>
           </div>
           <a
-            href="https://github.com/rommarkdev/zboxy"
+            href="https://github.com/romangalaxys10-spec/zboxy"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-sm text-white/40 hover:text-white/70 transition-colors px-3 py-1.5 rounded-lg hover:bg-white/[0.04]"
@@ -296,7 +296,7 @@ export default function LoginPage() {
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
               {/* GitHub badge */}
               <a
-                href="https://github.com/rommarkdev/zboxy"
+                href="https://github.com/romangalaxys10-spec/zboxy"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2.5 bg-white/[0.04] border border-white/[0.08] rounded-full px-4 py-2 text-xs text-white/50 hover:text-white/80 hover:bg-white/[0.06] hover:border-white/[0.12] transition-all"

@@ -318,7 +318,7 @@ export default function SharePage() {
             Shared via <span className="font-semibold text-slate-500">Zboxy</span>
           </p>
           <div className="flex items-center justify-center gap-4 text-[11px] text-slate-400">
-            <a href="https://github.com/rommarkdev/zboxy" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">GitHub</a>
+            <a href="https://github.com/romangalaxys10-spec/zboxy" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">GitHub</a>
             <span>Developed by <a href="https://www.rommark.dev" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 transition-colors">Roman</a></span>
           </div>
         </div>
